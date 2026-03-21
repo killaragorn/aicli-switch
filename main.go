@@ -6,8 +6,8 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/xbot/cc-switch/internal/profile"
-	"github.com/xbot/cc-switch/internal/switcher"
+	"github.com/killaragorn/aicli-switch/internal/profile"
+	"github.com/killaragorn/aicli-switch/internal/switcher"
 )
 
 const version = "0.1.0"
@@ -45,7 +45,7 @@ func main() {
 	case "help", "--help", "-h":
 		cmdHelp()
 	case "version", "--version", "-v":
-		fmt.Printf("cc-switch %s\n", version)
+		fmt.Printf("aicli-switch %s\n", version)
 	default:
 		// Treat as profile name to switch to
 		err = switcher.Switch(args[0])
@@ -59,7 +59,7 @@ func main() {
 
 func cmdAdd(args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: cc-switch add <name> [--type oauth|apikey]")
+		return fmt.Errorf("usage: aicli-switch add <name> [--type oauth|apikey]")
 	}
 
 	name := args[0]
@@ -77,7 +77,7 @@ func cmdAdd(args []string) error {
 
 func cmdRemove(args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: cc-switch rm <name>")
+		return fmt.Errorf("usage: aicli-switch rm <name>")
 	}
 	name := args[0]
 	if err := profile.Remove(name); err != nil {
@@ -94,7 +94,7 @@ func cmdList() error {
 	}
 
 	if len(profiles) == 0 {
-		fmt.Println("No profiles found. Use 'cc-switch add <name>' to add one.")
+		fmt.Println("No profiles found. Use 'aicli-switch add <name>' to add one.")
 		return nil
 	}
 
@@ -146,7 +146,7 @@ func cmdList() error {
 func cmdStatus() error {
 	active := profile.GetActive()
 	if active == "" {
-		fmt.Println("No active profile. Use 'cc-switch <name>' to switch.")
+		fmt.Println("No active profile. Use 'aicli-switch <name>' to switch.")
 		return nil
 	}
 
@@ -201,22 +201,22 @@ func cmdRefresh(args []string) error {
 }
 
 func cmdHelp() {
-	fmt.Printf(`%scc-switch%s — Claude Code OAuth account switcher (v%s)
+	fmt.Printf(`%saicli-switch%s — Claude Code OAuth account switcher (v%s)
 
 %sUsage:%s
-  cc-switch add <name> [--type oauth|apikey]   Add a new profile
-  cc-switch rm <name>                          Remove a profile
-  cc-switch ls                                 List all profiles
-  cc-switch <name>                             Switch to a profile
-  cc-switch status                             Show current profile
-  cc-switch refresh [name]                     Refresh OAuth token
-  cc-switch help                               Show this help
+  aicli-switch add <name> [--type oauth|apikey]   Add a new profile
+  aicli-switch rm <name>                          Remove a profile
+  aicli-switch ls                                 List all profiles
+  aicli-switch <name>                             Switch to a profile
+  aicli-switch status                             Show current profile
+  aicli-switch refresh [name]                     Refresh OAuth token
+  aicli-switch help                               Show this help
 
 %sExamples:%s
-  cc-switch add work                   Import current OAuth session as "work"
-  cc-switch add relay --type apikey    Add an API key profile
-  cc-switch work                       Switch to "work" profile
-  cc-switch ls                         List all profiles with status
+  aicli-switch add work                   Import current OAuth session as "work"
+  aicli-switch add relay --type apikey    Add an API key profile
+  aicli-switch work                       Switch to "work" profile
+  aicli-switch ls                         List all profiles with status
 `, bold, reset, version, bold, reset, bold, reset)
 }
 

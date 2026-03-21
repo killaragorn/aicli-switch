@@ -6,10 +6,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/xbot/cc-switch/internal/config"
-	"github.com/xbot/cc-switch/internal/crypto"
-	"github.com/xbot/cc-switch/internal/profile"
-	"github.com/xbot/cc-switch/internal/token"
+	"github.com/killaragorn/aicli-switch/internal/config"
+	"github.com/killaragorn/aicli-switch/internal/crypto"
+	"github.com/killaragorn/aicli-switch/internal/profile"
+	"github.com/killaragorn/aicli-switch/internal/token"
 )
 
 // Switch switches to the specified profile.

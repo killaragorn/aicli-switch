@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/xbot/cc-switch/internal/config"
-	"github.com/xbot/cc-switch/internal/crypto"
-	"github.com/xbot/cc-switch/internal/token"
+	"github.com/killaragorn/aicli-switch/internal/config"
+	"github.com/killaragorn/aicli-switch/internal/crypto"
+	"github.com/killaragorn/aicli-switch/internal/token"
 )
 
 type Profile struct {

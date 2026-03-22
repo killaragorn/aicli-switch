@@ -9,7 +9,7 @@ When one account hits its usage limit, just `aicli-switch another-account` — n
 ### npm (recommended)
 
 ```bash
-npm install -g aicli-switch
+npm install -g @kio_ai/aicli-switch
 ```
 
 This downloads the pre-built binary for your platform automatically.

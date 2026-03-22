@@ -45,7 +45,7 @@ func CheckForUpdate(currentVersion string) {
 	if latest != current && isNewer(latest, current) {
 		fmt.Fprintf(os.Stderr,
 			"\033[33mUpdate available: %s → %s\033[0m\n"+
-				"  Run: npm update -g aicli-switch\n"+
+				"  Run: npm update -g @kio_ai/aicli-switch\n"+
 				"  Or:  %s\n\n",
 			current, latest, url)
 	}

@@ -1,59 +1,84 @@
 # aicli-switch
 
-CLI tool for switching AI CLI tool credentials — seamlessly manage multiple Claude Code OAuth accounts and API Keys without re-authentication.
+Switch between multiple Claude Code accounts without re-authenticating.
 
-## Why
-
-When you hit the usage limit on one Claude Code account, you need to switch to another. Normally this means running `claude login` again and going through the full OAuth flow. **aicli-switch** saves your credentials and lets you switch with a single command.
-
-## Features
-
-- **OAuth account switching** — save multiple Claude Code OAuth sessions, switch without re-login
-- **Automatic token refresh** — expired tokens are refreshed automatically using the refresh_token
-- **API Key profiles** — also supports switching between different API Key + Base URL combos
-- **AES-256-GCM encryption** — credentials stored with the same encryption Claude Code uses
-- **Zero dependencies** — single Go binary, no runtime required
+When one account hits its usage limit, just `aicli-switch another-account` — no need to `claude login` again.
 
 ## Install
 
-```bash
-# Build from source
-go build -o aicli-switch.exe .
+### npm (recommended)
 
-# Copy to PATH
-cp aicli-switch.exe ~/.local/bin/
+```bash
+npm install -g aicli-switch
+```
+
+This downloads the pre-built binary for your platform automatically.
+
+### Manual download
+
+Download the binary for your OS from [Releases](https://github.com/killaragorn/aicli-switch/releases/latest):
+
+| Platform | File |
+|----------|------|
+| Windows x64 | `aicli-switch-windows-amd64.exe` |
+| macOS x64 | `aicli-switch-darwin-amd64` |
+| macOS Apple Silicon | `aicli-switch-darwin-arm64` |
+| Linux x64 | `aicli-switch-linux-amd64` |
+| Linux ARM64 | `aicli-switch-linux-arm64` |
+
+Move it to a directory in your PATH:
+
+```bash
+# macOS / Linux
+chmod +x aicli-switch-*
+mv aicli-switch-* /usr/local/bin/aicli-switch
+
+# Windows — move to any directory in your PATH
+move aicli-switch-windows-amd64.exe %USERPROFILE%\.local\bin\aicli-switch.exe
+```
+
+### Build from source
+
+Requires Go 1.22+:
+
+```bash
+git clone https://github.com/killaragorn/aicli-switch.git
+cd aicli-switch
+go build -o aicli-switch .
 ```
 
 ## Quick Start
 
 ```bash
-# 1. Log into your first account (normal claude login)
-# 2. Save it as a profile
+# Step 1: You're logged into account A in Claude Code
+# Save it as a profile
 aicli-switch add work
 
-# 3. Log into another account
+# Step 2: Log into account B
 claude login
-# 4. Save that too
+
+# Step 3: Save account B
 aicli-switch add personal
 
-# 5. Switch anytime
-aicli-switch work
-aicli-switch personal
+# Step 4: Now switch freely — no re-login needed
+aicli-switch work        # → switches to work account
+aicli-switch personal    # → switches to personal account
 ```
 
 ## Commands
 
-```
-aicli-switch add <name> [--type oauth|apikey]   Add a new profile
-aicli-switch rm <name>                          Remove a profile
-aicli-switch ls                                 List all profiles
-aicli-switch <name>                             Switch to a profile
-aicli-switch status                             Show current profile info
-aicli-switch refresh [name]                     Manually refresh OAuth token
-aicli-switch help                               Show help
-```
+| Command | Description |
+|---------|-------------|
+| `aicli-switch add <name>` | Save current Claude Code session as a named profile |
+| `aicli-switch add <name> -t apikey` | Add an API Key profile (interactive) |
+| `aicli-switch <name>` | Switch to a profile |
+| `aicli-switch ls` | List all profiles with status |
+| `aicli-switch status` | Show active profile details |
+| `aicli-switch refresh [name]` | Manually refresh an OAuth token |
+| `aicli-switch rm <name>` | Delete a profile |
+| `aicli-switch version` | Show version |
 
-## Example Output
+## What It Looks Like
 
 ```
 $ aicli-switch ls
@@ -75,29 +100,52 @@ Active Profile: personal
 
 ## How It Works
 
-1. `aicli-switch add` copies your current OAuth credentials (`~/.factory/auth.v2.*`) into `~/.cc-profiles/<name>/`
-2. `aicli-switch <name>` restores that profile's credentials back to `~/.factory/`, checking token expiry first
-3. If the token is expired, it automatically refreshes via Claude's OAuth endpoint before switching
-4. For API Key profiles, it updates `ANTHROPIC_API_KEY` and `ANTHROPIC_BASE_URL` in `~/.claude/settings.json`
+### OAuth Profiles
 
-## Storage
+1. **`add`** — copies your encrypted OAuth credentials (`~/.factory/auth.v2.*`) into `~/.cc-profiles/<name>/`
+2. **`switch`** — checks if the token is expired → refreshes if needed → restores credentials to `~/.factory/`
+3. **Token refresh** — calls Claude's OAuth endpoint with the saved refresh_token, no browser needed
+
+### API Key Profiles
+
+1. **`add -t apikey`** — prompts for API Key and Base URL, saves to profile
+2. **`switch`** — updates `ANTHROPIC_API_KEY` and `ANTHROPIC_BASE_URL` in `~/.claude/settings.json`
+
+### Storage Layout
 
 ```
 ~/.cc-profiles/
-├── _active              # Current active profile name
+├── _active                # Name of the currently active profile
 ├── work/
-│   ├── auth.v2.file     # Encrypted OAuth tokens
-│   ├── auth.v2.key      # AES-256-GCM key
-│   └── profile.json     # Profile metadata
+│   ├── auth.v2.file       # AES-256-GCM encrypted OAuth tokens
+│   ├── auth.v2.key        # Encryption key
+│   └── profile.json       # Metadata (name, type, email, timestamps)
 └── personal/
     └── ...
 ```
 
+### Security
+
+- Credentials are **always encrypted** (AES-256-GCM), same as Claude Code itself
+- Each profile has its own encryption key
+- No plaintext tokens anywhere on disk
+- The `_active` file only stores the profile name
+
+## Update Detection
+
+aicli-switch checks for new versions once per day (non-blocking). When an update is available:
+
+```
+Update available: 0.1.0 → 0.2.0
+  Run: npm update -g aicli-switch
+  Or:  https://github.com/killaragorn/aicli-switch/releases/tag/v0.2.0
+```
+
 ## Roadmap
 
-- [ ] Support for OpenAI Codex CLI credentials
-- [ ] Support for Gemini CLI credentials
-- [ ] Automatic failover when rate-limited
+- [ ] OpenAI Codex CLI credential switching
+- [ ] Gemini CLI credential switching
+- [ ] Automatic failover on rate-limit
 - [ ] Profile import/export
 
 ## License

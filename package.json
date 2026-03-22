@@ -1,0 +1,38 @@
+{
+  "name": "aicli-switch",
+  "version": "0.1.0",
+  "description": "CLI tool for switching AI CLI tool credentials (Claude Code OAuth, API Keys)",
+  "keywords": [
+    "claude-code",
+    "oauth",
+    "account-switch",
+    "ai-cli",
+    "credential-manager"
+  ],
+  "license": "MIT",
+  "author": "killaragorn",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/killaragorn/aicli-switch.git"
+  },
+  "bin": {
+    "aicli-switch": "bin/aicli-switch.js"
+  },
+  "scripts": {
+    "postinstall": "node scripts/install.js"
+  },
+  "os": [
+    "win32",
+    "darwin",
+    "linux"
+  ],
+  "engines": {
+    "node": ">=16"
+  },
+  "files": [
+    "bin/",
+    "scripts/",
+    "README.md",
+    "LICENSE"
+  ]
+}

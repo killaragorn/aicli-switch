@@ -1,3 +1,4 @@
-cc-switch.exe
 *.exe
+dist/
+node_modules/
 .claude/

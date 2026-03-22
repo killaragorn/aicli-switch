@@ -3,11 +3,13 @@ package main
 import (
 	"fmt"
 	"os"
+	"sync"
 	"text/tabwriter"
 	"time"
 
 	"github.com/killaragorn/aicli-switch/internal/profile"
 	"github.com/killaragorn/aicli-switch/internal/switcher"
+	"github.com/killaragorn/aicli-switch/internal/updater"
 )
 
 const version = "0.1.0"
@@ -24,9 +26,18 @@ const (
 )
 
 func main() {
+	// Async update check (non-blocking)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		updater.CheckForUpdate(version)
+	}()
+
 	args := os.Args[1:]
 	if len(args) == 0 {
 		cmdHelp()
+		wg.Wait()
 		return
 	}
 
@@ -51,6 +62,7 @@ func main() {
 		err = switcher.Switch(args[0])
 	}
 
+	wg.Wait()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s%serror:%s %v\n", bold, red, reset, err)
 		os.Exit(1)

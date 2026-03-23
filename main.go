@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"sync"
-	"text/tabwriter"
 	"time"
 
 	"github.com/killaragorn/aicli-switch/internal/profile"
@@ -13,7 +12,7 @@ import (
 	"github.com/killaragorn/aicli-switch/internal/updater"
 )
 
-const version = "0.3.0"
+const version = "0.3.1"
 
 // ANSI colors
 const (
@@ -111,50 +110,131 @@ func cmdList() error {
 		return nil
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintf(w, "%s  NAME\tTYPE\tSUBSCRIPTION\tSTATUS\tEXPIRY%s\n", dim, reset)
+	// Collect plain-text column values to compute widths
+	type row struct {
+		marker       string // "▶" or ""
+		name         string
+		typ          string
+		subscription string
+		status       string
+		expiry       string
+		isActive     bool
+		// color helpers
+		statusColor string
+		subColor    string
+		expiryColor string
+	}
 
+	rows := make([]row, 0, len(profiles))
 	for _, p := range profiles {
-		marker := "  "
+		r := row{
+			name:     p.Name,
+			typ:      p.Type,
+			isActive: p.IsActive,
+		}
 		if p.IsActive {
-			marker = green + "▶ " + reset
+			r.marker = "▶"
 		}
 
-		status := ""
-		expiry := ""
-		subscription := ""
 		switch p.Type {
 		case "oauth":
 			if p.TokenExpiry.IsZero() {
-				status = yellow + "unknown" + reset
+				r.status = "unknown"
+				r.statusColor = yellow
 			} else if p.IsExpired {
-				status = red + "expired" + reset
+				r.status = "expired"
+				r.statusColor = red
 			} else {
-				status = green + "valid" + reset
+				r.status = "valid"
+				r.statusColor = green
 			}
 			if !p.TokenExpiry.IsZero() {
 				remaining := time.Until(p.TokenExpiry)
 				if remaining > 0 {
-					expiry = formatDuration(remaining)
+					r.expiry = formatDuration(remaining)
 				} else {
-					expiry = red + "expired" + reset
+					r.expiry = "expired"
+					r.expiryColor = red
 				}
 			}
 			if p.Subscription != "" {
-				subscription = cyan + p.Subscription + reset
+				r.subscription = p.Subscription
+				r.subColor = cyan
 			} else {
-				subscription = dim + "-" + reset
+				r.subscription = "-"
+				r.subColor = dim
 			}
 		case "apikey":
-			status = green + "ready" + reset
-			expiry = dim + "n/a" + reset
-			subscription = dim + "api key" + reset
+			r.status = "ready"
+			r.statusColor = green
+			r.expiry = "n/a"
+			r.expiryColor = dim
+			r.subscription = "api key"
+			r.subColor = dim
 		}
 
-		fmt.Fprintf(w, "%s%s\t%s\t%s\t%s\t%s\n", marker, p.Name, p.Type, subscription, status, expiry)
+		rows = append(rows, r)
 	}
 
-	w.Flush()
+	// Compute max visible width for each column
+	headers := [5]string{"NAME", "TYPE", "SUBSCRIPTION", "STATUS", "EXPIRY"}
+	widths := [5]int{len(headers[0]), len(headers[1]), len(headers[2]), len(headers[3]), len(headers[4])}
+	for _, r := range rows {
+		vals := [5]int{len(r.name), len(r.typ), len(r.subscription), len(r.status), len(r.expiry)}
+		for i, v := range vals {
+			if v > widths[i] {
+				widths[i] = v
+			}
+		}
+	}
+
+	gap := 3 // spacing between columns
+
+	// Print header
+	fmt.Printf("%s  %-*s  %-*s  %-*s  %-*s  %s%s\n", dim,
+		widths[0], headers[0],
+		widths[1], headers[1],
+		widths[2], headers[2],
+		widths[3], headers[3],
+		headers[4], reset)
+
+	// Print rows
+	for _, r := range rows {
+		// Marker column (2 chars wide)
+		if r.isActive {
+			fmt.Printf("%s▶%s ", green, reset)
+		} else {
+			fmt.Print("  ")
+		}
+
+		// Name
+		fmt.Printf("%-*s", widths[0]+gap, r.name)
+
+		// Type
+		fmt.Printf("%-*s", widths[1]+gap, r.typ)
+
+		// Subscription (with color)
+		sub := r.subscription
+		if r.subColor != "" {
+			sub = r.subColor + r.subscription + reset
+		}
+		fmt.Printf("%s%-*s", sub, widths[2]+gap-len(r.subscription), "")
+
+		// Status (with color)
+		st := r.status
+		if r.statusColor != "" {
+			st = r.statusColor + r.status + reset
+		}
+		fmt.Printf("%s%-*s", st, widths[3]+gap-len(r.status), "")
+
+		// Expiry (with color)
+		exp := r.expiry
+		if r.expiryColor != "" {
+			exp = r.expiryColor + r.expiry + reset
+		}
+		fmt.Println(exp)
+	}
+
 	return nil
 }
 

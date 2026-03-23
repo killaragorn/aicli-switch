@@ -6,16 +6,14 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 )
 
 const (
-	repoOwner       = "killaragorn"
-	repoName        = "aicli-switch"
-	checkIntervalH  = 24
-	releaseURL      = "https://api.github.com/repos/" + repoOwner + "/" + repoName + "/releases/latest"
+	repoOwner  = "killaragorn"
+	repoName   = "aicli-switch"
+	releaseURL = "https://api.github.com/repos/" + repoOwner + "/" + repoName + "/releases/latest"
 )
 
 type githubRelease struct {
@@ -26,14 +24,6 @@ type githubRelease struct {
 // CheckForUpdate checks GitHub for a newer version. Non-blocking: prints a
 // notice if a newer version exists, silently returns on any error.
 func CheckForUpdate(currentVersion string) {
-	stateFile := stateFilePath()
-	if !shouldCheck(stateFile) {
-		return
-	}
-
-	// Record that we checked (even if it fails, avoid hammering)
-	writeCheckTime(stateFile)
-
 	latest, url, err := fetchLatestVersion()
 	if err != nil || latest == "" {
 		return
@@ -77,28 +67,6 @@ func fetchLatestVersion() (tag, url string, err error) {
 	}
 
 	return rel.TagName, rel.HTMLURL, nil
-}
-
-func shouldCheck(stateFile string) bool {
-	data, err := os.ReadFile(stateFile)
-	if err != nil {
-		return true
-	}
-	t, err := time.Parse(time.RFC3339, strings.TrimSpace(string(data)))
-	if err != nil {
-		return true
-	}
-	return time.Since(t) > time.Duration(checkIntervalH)*time.Hour
-}
-
-func writeCheckTime(stateFile string) {
-	os.MkdirAll(filepath.Dir(stateFile), 0700)
-	os.WriteFile(stateFile, []byte(time.Now().Format(time.RFC3339)), 0600)
-}
-
-func stateFilePath() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".cc-profiles", ".last-update-check")
 }
 
 // isNewer returns true if a > b using simple semver comparison.

@@ -5,16 +5,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/killaragorn/aicli-switch/internal/config"
-	"github.com/killaragorn/aicli-switch/internal/crypto"
 	"github.com/killaragorn/aicli-switch/internal/profile"
 	"github.com/killaragorn/aicli-switch/internal/token"
 )
 
 // Switch switches to the specified profile.
 func Switch(name string) error {
-	// Verify target profile exists
 	target, err := profile.Get(name)
 	if err != nil {
 		return err
@@ -45,7 +44,6 @@ func Switch(name string) error {
 		}
 	}
 
-	// Update active profile
 	profile.SaveActive(name)
 	profile.UpdateLastSwitched(name)
 
@@ -66,68 +64,52 @@ func RefreshProfile(name string) error {
 		return fmt.Errorf("profile %q is not OAuth type", name)
 	}
 
-	dir := config.ProfileDir(name)
-	keyPath := filepath.Join(dir, config.AuthKeyFileName)
-	filePath := filepath.Join(dir, config.AuthFileName)
-
-	plaintext, err := crypto.DecryptAuthFile(keyPath, filePath)
+	oauth, err := profile.ReadProfileOAuth(name)
 	if err != nil {
-		return fmt.Errorf("decrypt: %w", err)
-	}
-
-	var tokens token.AuthTokens
-	if err := json.Unmarshal(plaintext, &tokens); err != nil {
-		return fmt.Errorf("parse tokens: %w", err)
+		return err
 	}
 
 	fmt.Printf("Refreshing token for %q...\n", name)
-	resp, err := token.RefreshToken(tokens.RefreshToken)
+	resp, err := token.RefreshOAuthToken(oauth.RefreshToken)
 	if err != nil {
 		return fmt.Errorf("refresh failed: %w\nYou may need to run 'claude login' and re-add this profile", err)
 	}
 
 	// Update tokens
-	tokens.AccessToken = resp.AccessToken
+	oauth.AccessToken = resp.AccessToken
 	if resp.RefreshToken != "" {
-		tokens.RefreshToken = resp.RefreshToken
+		oauth.RefreshToken = resp.RefreshToken
+	}
+	if resp.ExpiresIn > 0 {
+		oauth.ExpiresAt = time.Now().Add(time.Duration(resp.ExpiresIn) * time.Second).UnixMilli()
 	}
 
-	newPlaintext, _ := json.Marshal(tokens)
-	if err := crypto.EncryptAuthFile(keyPath, filePath, newPlaintext); err != nil {
-		return fmt.Errorf("encrypt: %w", err)
+	if err := profile.SaveProfileOAuth(name, oauth); err != nil {
+		return fmt.Errorf("save refreshed token: %w", err)
 	}
 
-	exp := token.GetExpiry(tokens.AccessToken)
+	exp := token.GetExpiryFromData(oauth)
 	fmt.Printf("Token refreshed. New expiry: %s\n", exp.Local().Format("2006-01-02 15:04:05"))
 
 	// Update email in profile if changed
-	email := token.GetEmail(tokens.AccessToken)
+	email := token.GetEmail(oauth.AccessToken)
 	if email != "" && email != p.Email {
 		p.Email = email
 		data, _ := json.MarshalIndent(p, "", "  ")
-		os.WriteFile(filepath.Join(dir, config.ProfileFileName), data, 0600)
+		os.WriteFile(filepath.Join(config.ProfileDir(name), config.ProfileFileName), data, 0600)
 	}
 
 	return nil
 }
 
 func ensureValidToken(name string) error {
-	dir := config.ProfileDir(name)
-	keyPath := filepath.Join(dir, config.AuthKeyFileName)
-	filePath := filepath.Join(dir, config.AuthFileName)
-
-	plaintext, err := crypto.DecryptAuthFile(keyPath, filePath)
+	oauth, err := profile.ReadProfileOAuth(name)
 	if err != nil {
-		return fmt.Errorf("decrypt: %w", err)
+		return err
 	}
 
-	var tokens token.AuthTokens
-	if err := json.Unmarshal(plaintext, &tokens); err != nil {
-		return fmt.Errorf("parse tokens: %w", err)
-	}
-
-	if !token.IsExpired(tokens.AccessToken) {
-		return nil // Token still valid
+	if !token.IsExpiredData(oauth) {
+		return nil
 	}
 
 	fmt.Printf("Token expired, refreshing...\n")
@@ -135,31 +117,13 @@ func ensureValidToken(name string) error {
 }
 
 func deployOAuth(name string) error {
-	dir := config.ProfileDir(name)
-
-	if err := config.EnsureDir(config.FactoryDir()); err != nil {
+	oauth, err := profile.ReadProfileOAuth(name)
+	if err != nil {
 		return err
 	}
 
-	// Copy auth files to ~/.factory/
-	if err := copyFile(
-		filepath.Join(dir, config.AuthFileName),
-		config.FactoryAuthFile(),
-	); err != nil {
-		return fmt.Errorf("copy auth file: %w", err)
-	}
-
-	if err := copyFile(
-		filepath.Join(dir, config.AuthKeyFileName),
-		config.FactoryAuthKey(),
-	); err != nil {
-		return fmt.Errorf("copy auth key: %w", err)
-	}
-
-	// Clear API key from settings if present (switching to OAuth)
-	clearAPIKeyFromSettings()
-
-	return nil
+	// Write claudeAiOauth to ~/.claude/.credentials.json, preserving mcpOAuth
+	return profile.WriteCredentialsOAuth(oauth)
 }
 
 func deployAPIKey(name string) error {
@@ -244,22 +208,12 @@ func backupCurrent(name string) {
 		return
 	}
 
-	dir := config.ProfileDir(name)
-
-	switch p.Type {
-	case "oauth":
-		// Backup current ~/.factory/ files
-		copyFile(config.FactoryAuthFile(), filepath.Join(dir, config.AuthFileName))
-		copyFile(config.FactoryAuthKey(), filepath.Join(dir, config.AuthKeyFileName))
-	case "apikey":
-		// API key profiles don't need backup from live state
+	if p.Type == "oauth" {
+		// Backup current ~/.claude/.credentials.json oauth data to profile
+		oauth, err := profile.ReadCredentialsOAuth()
+		if err != nil {
+			return
+		}
+		profile.SaveProfileOAuth(name, oauth)
 	}
-}
-
-func copyFile(src, dst string) error {
-	data, err := os.ReadFile(src)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(dst, data, 0600)
 }

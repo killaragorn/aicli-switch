@@ -6,15 +6,14 @@ import (
 )
 
 const (
-	ProfilesDirName    = ".cc-profiles"
-	FactoryDirName     = ".factory"
-	ClaudeDirName      = ".claude"
-	ActiveFileName     = "_active"
-	AuthFileName       = "auth.v2.file"
-	AuthKeyFileName    = "auth.v2.key"
-	ProfileFileName    = "profile.json"
-	SettingsEnvName    = "settings.env.json"
-	ClaudeSettingsName = "settings.json"
+	ProfilesDirName     = ".cc-profiles"
+	ClaudeDirName       = ".claude"
+	ActiveFileName      = "_active"
+	CredentialsFileName = ".credentials.json"
+	OAuthFileName       = "oauth.json"
+	ProfileFileName     = "profile.json"
+	SettingsEnvName     = "settings.env.json"
+	ClaudeSettingsName  = "settings.json"
 )
 
 func HomeDir() string {
@@ -37,16 +36,12 @@ func ActiveFile() string {
 	return filepath.Join(ProfilesDir(), ActiveFileName)
 }
 
-func FactoryDir() string {
-	return filepath.Join(HomeDir(), FactoryDirName)
+func ClaudeDir() string {
+	return filepath.Join(HomeDir(), ClaudeDirName)
 }
 
-func FactoryAuthFile() string {
-	return filepath.Join(FactoryDir(), AuthFileName)
-}
-
-func FactoryAuthKey() string {
-	return filepath.Join(FactoryDir(), AuthKeyFileName)
+func CredentialsFile() string {
+	return filepath.Join(ClaudeDir(), CredentialsFileName)
 }
 
 func ClaudeSettingsPath() string {

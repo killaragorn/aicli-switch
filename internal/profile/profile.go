@@ -10,15 +10,14 @@ import (
 	"time"
 
 	"github.com/killaragorn/aicli-switch/internal/config"
-	"github.com/killaragorn/aicli-switch/internal/crypto"
 	"github.com/killaragorn/aicli-switch/internal/token"
 )
 
 type Profile struct {
-	Name        string `json:"name"`
-	Type        string `json:"type"` // "oauth" or "apikey"
-	Email       string `json:"email,omitempty"`
-	CreatedAt   string `json:"created_at"`
+	Name         string `json:"name"`
+	Type         string `json:"type"` // "oauth" or "apikey"
+	Email        string `json:"email,omitempty"`
+	CreatedAt    string `json:"created_at"`
 	LastSwitched string `json:"last_switched,omitempty"`
 }
 
@@ -32,6 +31,85 @@ type ProfileInfo struct {
 	TokenExpiry time.Time
 	IsExpired   bool
 	IsActive    bool
+}
+
+// ReadCredentialsOAuth reads the claudeAiOauth section from ~/.claude/.credentials.json
+func ReadCredentialsOAuth() (*token.OAuthData, error) {
+	data, err := os.ReadFile(config.CredentialsFile())
+	if err != nil {
+		return nil, fmt.Errorf("read credentials file: %w", err)
+	}
+
+	var creds token.CredentialsFile
+	if err := json.Unmarshal(data, &creds); err != nil {
+		return nil, fmt.Errorf("parse credentials: %w", err)
+	}
+
+	if creds.ClaudeAiOauth == nil {
+		return nil, fmt.Errorf("no claudeAiOauth found in credentials file")
+	}
+
+	var oauth token.OAuthData
+	if err := json.Unmarshal(creds.ClaudeAiOauth, &oauth); err != nil {
+		return nil, fmt.Errorf("parse claudeAiOauth: %w", err)
+	}
+
+	return &oauth, nil
+}
+
+// WriteCredentialsOAuth writes the claudeAiOauth section to ~/.claude/.credentials.json
+// while preserving other fields (like mcpOAuth).
+func WriteCredentialsOAuth(oauth *token.OAuthData) error {
+	credPath := config.CredentialsFile()
+
+	// Read existing file to preserve mcpOAuth etc.
+	var raw map[string]json.RawMessage
+	data, err := os.ReadFile(credPath)
+	if err != nil {
+		raw = make(map[string]json.RawMessage)
+	} else {
+		if err := json.Unmarshal(data, &raw); err != nil {
+			raw = make(map[string]json.RawMessage)
+		}
+	}
+
+	oauthBytes, err := json.Marshal(oauth)
+	if err != nil {
+		return fmt.Errorf("marshal oauth: %w", err)
+	}
+	raw["claudeAiOauth"] = oauthBytes
+
+	out, err := json.MarshalIndent(raw, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal credentials: %w", err)
+	}
+
+	return os.WriteFile(credPath, out, 0600)
+}
+
+// ReadProfileOAuth reads the saved oauth.json from a profile directory.
+func ReadProfileOAuth(name string) (*token.OAuthData, error) {
+	oauthPath := filepath.Join(config.ProfileDir(name), config.OAuthFileName)
+	data, err := os.ReadFile(oauthPath)
+	if err != nil {
+		return nil, fmt.Errorf("read oauth file for profile %q: %w", name, err)
+	}
+
+	var oauth token.OAuthData
+	if err := json.Unmarshal(data, &oauth); err != nil {
+		return nil, fmt.Errorf("parse oauth for profile %q: %w", name, err)
+	}
+	return &oauth, nil
+}
+
+// SaveProfileOAuth saves oauth data to a profile's oauth.json.
+func SaveProfileOAuth(name string, oauth *token.OAuthData) error {
+	oauthPath := filepath.Join(config.ProfileDir(name), config.OAuthFileName)
+	data, err := json.MarshalIndent(oauth, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal oauth: %w", err)
+	}
+	return os.WriteFile(oauthPath, data, 0600)
 }
 
 // Add creates a new profile from the current Claude Code state.
@@ -53,35 +131,18 @@ func Add(name, profileType string) error {
 
 	switch profileType {
 	case "oauth":
-		// Copy auth files from ~/.factory/
-		authFile := config.FactoryAuthFile()
-		authKey := config.FactoryAuthKey()
-
-		if _, err := os.Stat(authFile); os.IsNotExist(err) {
+		oauth, err := ReadCredentialsOAuth()
+		if err != nil {
 			os.RemoveAll(dir)
-			return fmt.Errorf("no OAuth credentials found at %s\nPlease run 'claude login' first", authFile)
+			return fmt.Errorf("read current OAuth credentials: %w\nPlease run 'claude login' first", err)
 		}
 
-		if err := copyFile(authFile, filepath.Join(dir, config.AuthFileName)); err != nil {
+		if err := SaveProfileOAuth(name, oauth); err != nil {
 			os.RemoveAll(dir)
-			return fmt.Errorf("copy auth file: %w", err)
-		}
-		if err := copyFile(authKey, filepath.Join(dir, config.AuthKeyFileName)); err != nil {
-			os.RemoveAll(dir)
-			return fmt.Errorf("copy auth key: %w", err)
+			return fmt.Errorf("save oauth data: %w", err)
 		}
 
-		// Extract email from JWT
-		plaintext, err := crypto.DecryptAuthFile(
-			filepath.Join(dir, config.AuthKeyFileName),
-			filepath.Join(dir, config.AuthFileName),
-		)
-		if err == nil {
-			var tokens token.AuthTokens
-			if json.Unmarshal(plaintext, &tokens) == nil {
-				p.Email = token.GetEmail(tokens.AccessToken)
-			}
-		}
+		p.Email = token.GetEmail(oauth.AccessToken)
 
 	case "apikey":
 		reader := bufio.NewReader(os.Stdin)
@@ -165,7 +226,7 @@ func List() ([]ProfileInfo, error) {
 	var profiles []ProfileInfo
 
 	for _, e := range entries {
-		if !e.IsDir() || strings.HasPrefix(e.Name(), "_") {
+		if !e.IsDir() || strings.HasPrefix(e.Name(), "_") || strings.HasPrefix(e.Name(), ".") {
 			continue
 		}
 
@@ -180,17 +241,10 @@ func List() ([]ProfileInfo, error) {
 		}
 
 		if p.Type == "oauth" {
-			dir := config.ProfileDir(p.Name)
-			plaintext, err := crypto.DecryptAuthFile(
-				filepath.Join(dir, config.AuthKeyFileName),
-				filepath.Join(dir, config.AuthFileName),
-			)
+			oauth, err := ReadProfileOAuth(p.Name)
 			if err == nil {
-				var tokens token.AuthTokens
-				if json.Unmarshal(plaintext, &tokens) == nil {
-					info.TokenExpiry = token.GetExpiry(tokens.AccessToken)
-					info.IsExpired = token.IsExpired(tokens.AccessToken)
-				}
+				info.TokenExpiry = token.GetExpiryFromData(oauth)
+				info.IsExpired = token.IsExpiredData(oauth)
 			}
 		}
 
@@ -226,12 +280,4 @@ func UpdateLastSwitched(name string) error {
 	p.LastSwitched = time.Now().Format(time.RFC3339)
 	data, _ := json.MarshalIndent(p, "", "  ")
 	return os.WriteFile(filepath.Join(config.ProfileDir(name), config.ProfileFileName), data, 0600)
-}
-
-func copyFile(src, dst string) error {
-	data, err := os.ReadFile(src)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(dst, data, 0600)
 }

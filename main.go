@@ -12,7 +12,7 @@ import (
 	"github.com/killaragorn/aicli-switch/internal/updater"
 )
 
-const version = "0.1.0"
+const version = "0.2.0"
 
 // ANSI colors
 const (

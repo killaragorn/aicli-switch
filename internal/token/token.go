@@ -19,6 +19,22 @@ const (
 	RefreshWindow = 5 * time.Minute
 )
 
+// OAuthData matches the claudeAiOauth structure in ~/.claude/.credentials.json
+type OAuthData struct {
+	AccessToken      string   `json:"accessToken"`
+	RefreshToken     string   `json:"refreshToken"`
+	ExpiresAt        int64    `json:"expiresAt"` // milliseconds since epoch
+	Scopes           []string `json:"scopes,omitempty"`
+	SubscriptionType string   `json:"subscriptionType,omitempty"`
+	RateLimitTier    string   `json:"rateLimitTier,omitempty"`
+}
+
+// CredentialsFile represents the full ~/.claude/.credentials.json structure
+type CredentialsFile struct {
+	ClaudeAiOauth json.RawMessage `json:"claudeAiOauth,omitempty"`
+	McpOAuth      json.RawMessage `json:"mcpOAuth,omitempty"`
+}
+
 type TokenResponse struct {
 	AccessToken  string `json:"access_token"`
 	TokenType    string `json:"token_type"`
@@ -27,9 +43,21 @@ type TokenResponse struct {
 	Scope        string `json:"scope,omitempty"`
 }
 
-type AuthTokens struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
+// GetExpiryFromData returns the expiry time from OAuthData.
+func GetExpiryFromData(data *OAuthData) time.Time {
+	if data.ExpiresAt == 0 {
+		return time.Time{}
+	}
+	return time.UnixMilli(data.ExpiresAt)
+}
+
+// IsExpiredData checks if OAuth data is expired or will expire within RefreshWindow.
+func IsExpiredData(data *OAuthData) bool {
+	exp := GetExpiryFromData(data)
+	if exp.IsZero() {
+		return true
+	}
+	return time.Until(exp) < RefreshWindow
 }
 
 // ParseJWTPayload decodes the payload of a JWT without verification.
@@ -63,29 +91,8 @@ func GetEmail(accessToken string) string {
 	return ""
 }
 
-// GetExpiry extracts the expiration time from a JWT.
-func GetExpiry(accessToken string) time.Time {
-	claims, err := ParseJWTPayload(accessToken)
-	if err != nil {
-		return time.Time{}
-	}
-	if exp, ok := claims["exp"].(float64); ok {
-		return time.Unix(int64(exp), 0)
-	}
-	return time.Time{}
-}
-
-// IsExpired checks if a JWT token is expired or will expire within RefreshWindow.
-func IsExpired(accessToken string) bool {
-	exp := GetExpiry(accessToken)
-	if exp.IsZero() {
-		return true
-	}
-	return time.Until(exp) < RefreshWindow
-}
-
-// RefreshToken exchanges a refresh token for a new access token.
-func RefreshToken(refreshToken string) (*TokenResponse, error) {
+// RefreshOAuthToken exchanges a refresh token for a new access token.
+func RefreshOAuthToken(refreshToken string) (*TokenResponse, error) {
 	body := map[string]string{
 		"grant_type":    "refresh_token",
 		"refresh_token": refreshToken,
@@ -128,7 +135,6 @@ func RefreshToken(refreshToken string) (*TokenResponse, error) {
 }
 
 func base64URLDecode(s string) ([]byte, error) {
-	// Add padding if needed
 	switch len(s) % 4 {
 	case 2:
 		s += "=="

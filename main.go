@@ -13,7 +13,7 @@ import (
 	"github.com/killaragorn/aicli-switch/internal/updater"
 )
 
-const version = "0.2.2"
+const version = "0.3.0"
 
 // ANSI colors
 const (
@@ -250,23 +250,36 @@ func cmdRefresh(args []string) error {
 }
 
 func cmdHelp() {
-	fmt.Printf(`%saicli-switch%s — Claude Code OAuth account switcher (v%s)
+	fmt.Printf(`%saicli-switch%s — Claude Code credential switcher (v%s)
 
-%sUsage:%s
-  aicli-switch add <name> [--type oauth|apikey]   Add a new profile
-  aicli-switch rm <name>                          Remove a profile
-  aicli-switch ls                                 List all profiles
-  aicli-switch <name>                             Switch to a profile
-  aicli-switch status                             Show current profile
-  aicli-switch refresh [name]                     Refresh OAuth token
+  Seamlessly switch between multiple Claude Code accounts (OAuth or API Key)
+  without re-authenticating. Useful when one account hits its usage limit.
+
+%sCommands:%s
+  aicli-switch add <name> [--type oauth|apikey]   Save current credentials as a named profile
+                                                   (default type: oauth)
+  aicli-switch rm <name>                          Delete a saved profile
+  aicli-switch ls                                 List all profiles with status and expiry
+  aicli-switch <name>                             Switch to a profile (cleans up auth conflicts)
+  aicli-switch status                             Show active profile and credential sync status
+  aicli-switch refresh [name]                     Refresh an OAuth token (default: active profile)
+  aicli-switch version                            Show version
   aicli-switch help                               Show this help
 
 %sExamples:%s
-  aicli-switch add work                   Import current OAuth session as "work"
-  aicli-switch add relay --type apikey    Add an API key profile
-  aicli-switch work                       Switch to "work" profile
-  aicli-switch ls                         List all profiles with status
-`, bold, reset, version, bold, reset, bold, reset)
+  claude login                              First, log in to a Claude account
+  aicli-switch add work                     Save the current OAuth session as "work"
+  claude login                              Log in to another account
+  aicli-switch add personal                 Save it as "personal"
+  aicli-switch work                         Switch back to "work" instantly
+  aicli-switch add relay --type apikey      Add an API key profile (prompts for key)
+  aicli-switch ls                           List all profiles with subscription and expiry
+
+%sHow it works:%s
+  OAuth profiles are read from ~/.claude/.credentials.json (claudeAiOauth).
+  Switching cleans up conflicting auth state (API keys, OAuth tokens, cached
+  account info in ~/.claude.json) so Claude Code starts fresh with the new profile.
+`, bold, reset, version, bold, reset, bold, reset, bold, reset)
 }
 
 func formatDuration(d time.Duration) string {

@@ -129,6 +129,8 @@ func deployOAuth(name string) error {
 
 	// Clear any API key from settings to avoid auth conflict
 	clearAPIKeyFromSettings()
+	// Clear stale oauthAccount from config.json so Claude CLI re-fetches from new token
+	clearOAuthAccountFromConfig()
 	return nil
 }
 
@@ -151,6 +153,8 @@ func deployAPIKey(name string) error {
 
 	// Clear claudeAiOauth from credentials to avoid auth conflict
 	clearOAuthFromCredentials()
+	// Clear oauthAccount from config.json so Claude CLI doesn't show stale email
+	clearOAuthAccountFromConfig()
 	return nil
 }
 
@@ -187,6 +191,24 @@ func mergeEnvToSettings(env profile.EnvSettings) error {
 	}
 
 	return os.WriteFile(settingsPath, out, 0600)
+}
+
+func clearOAuthAccountFromConfig() {
+	configPath := config.ClaudeConfigPath()
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return
+	}
+
+	var raw map[string]json.RawMessage
+	if json.Unmarshal(data, &raw) != nil {
+		return
+	}
+
+	delete(raw, "oauthAccount")
+
+	out, _ := json.MarshalIndent(raw, "", "  ")
+	os.WriteFile(configPath, out, 0600)
 }
 
 func clearOAuthFromCredentials() {

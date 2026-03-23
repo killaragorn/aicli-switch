@@ -48,6 +48,10 @@ func ClaudeSettingsPath() string {
 	return filepath.Join(HomeDir(), ClaudeDirName, ClaudeSettingsName)
 }
 
+func ClaudeConfigPath() string {
+	return filepath.Join(HomeDir(), ".claude.json")
+}
+
 func EnsureDir(dir string) error {
 	return os.MkdirAll(dir, 0700)
 }

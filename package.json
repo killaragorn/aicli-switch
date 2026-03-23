@@ -1,6 +1,6 @@
 {
   "name": "@kio_ai/aicli-switch",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "CLI tool for switching AI CLI tool credentials (Claude Code OAuth, API Keys)",
   "keywords": [
     "claude-code",

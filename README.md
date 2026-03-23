@@ -39,7 +39,7 @@ move aicli-switch-windows-amd64.exe %USERPROFILE%\.local\bin\aicli-switch.exe
 
 ### Build from source
 
-Requires Go 1.22+:
+Requires Go 1.24+:
 
 ```bash
 git clone https://github.com/killaragorn/aicli-switch.git
@@ -69,11 +69,11 @@ aicli-switch personal    # → switches to personal account
 
 | Command | Description |
 |---------|-------------|
-| `aicli-switch add <name>` | Save current Claude Code session as a named profile |
-| `aicli-switch add <name> -t apikey` | Add an API Key profile (interactive) |
-| `aicli-switch <name>` | Switch to a profile |
-| `aicli-switch ls` | List all profiles with status |
-| `aicli-switch status` | Show active profile details |
+| `aicli-switch add <name>` | Save current OAuth session as a named profile (default) |
+| `aicli-switch add <name> -t apikey` | Add an API Key profile (interactive prompt) |
+| `aicli-switch <name>` | Switch to a profile (cleans up all auth conflicts) |
+| `aicli-switch ls` | List all profiles with subscription, status and expiry |
+| `aicli-switch status` | Show active profile and compare with live credentials |
 | `aicli-switch refresh [name]` | Manually refresh an OAuth token |
 | `aicli-switch rm <name>` | Delete a profile |
 | `aicli-switch version` | Show version |
@@ -82,34 +82,53 @@ aicli-switch personal    # → switches to personal account
 
 ```
 $ aicli-switch ls
-  NAME       TYPE   EMAIL                 STATUS   EXPIRY
-▶ work       oauth  user@company.com      valid    6.9d
-  personal   oauth  me@gmail.com          valid    4.2d
-  relay      apikey -                     ready    n/a
+  NAME       TYPE    SUBSCRIPTION  STATUS   EXPIRY
+▶ work       oauth   max           valid    6.9h
+  personal   oauth   pro           valid    4.2h
+  relay      apikey  api key       ready    n/a
 
 $ aicli-switch personal
 Switched to profile "personal" (oauth)
-  Email: me@gmail.com
 
 $ aicli-switch status
-Active Profile: personal
-  Type:    oauth
-  Email:   me@gmail.com
-  Token:   valid (expires in 4.2d)
+Active Profile: personal (oauth)
+  Created:  2026-03-21T10:00:00+08:00
+  Switched: 2026-03-23T14:30:00+08:00
+
+Profile (saved):
+  Token:        valid (expires in 4.2h, at 2026-03-23 18:30:00)
+  Subscription: pro
+
+~/.claude/.credentials.json (live):
+  Token:        valid (expires in 4.2h, at 2026-03-23 18:30:00)
+  Subscription: pro
+
+  ✓ In sync
 ```
 
 ## How It Works
 
 ### OAuth Profiles
 
-1. **`add`** — copies your encrypted OAuth credentials (`~/.factory/auth.v2.*`) into `~/.cc-profiles/<name>/`
-2. **`switch`** — checks if the token is expired → refreshes if needed → restores credentials to `~/.factory/`
+1. **`add`** — reads `claudeAiOauth` from `~/.claude/.credentials.json` and saves it to `~/.cc-profiles/<name>/oauth.json`
+2. **`switch`** — writes saved OAuth data back to `~/.claude/.credentials.json`, clears conflicting API keys from `settings.json`, and removes cached `oauthAccount` from `~/.claude.json` so Claude CLI picks up the new identity
 3. **Token refresh** — calls Claude's OAuth endpoint with the saved refresh_token, no browser needed
 
 ### API Key Profiles
 
 1. **`add -t apikey`** — prompts for API Key and Base URL, saves to profile
-2. **`switch`** — updates `ANTHROPIC_API_KEY` and `ANTHROPIC_BASE_URL` in `~/.claude/settings.json`
+2. **`switch`** — updates `ANTHROPIC_API_KEY` and `ANTHROPIC_BASE_URL` in `~/.claude/settings.json`, clears `claudeAiOauth` from credentials, and removes cached `oauthAccount` from `~/.claude.json`
+
+### What gets cleaned up on switch
+
+Switching profiles ensures a clean auth state by clearing conflicting credentials:
+
+| Switch to | Actions |
+|-----------|---------|
+| **OAuth** | Write `claudeAiOauth` → clear `ANTHROPIC_API_KEY` from settings → clear `oauthAccount` cache |
+| **API Key** | Write `ANTHROPIC_API_KEY` to settings → clear `claudeAiOauth` from credentials → clear `oauthAccount` cache |
+
+This prevents the "Both a token and an API key are set" conflict in Claude Code.
 
 ### Storage Layout
 
@@ -117,28 +136,29 @@ Active Profile: personal
 ~/.cc-profiles/
 ├── _active                # Name of the currently active profile
 ├── work/
-│   ├── auth.v2.file       # AES-256-GCM encrypted OAuth tokens
-│   ├── auth.v2.key        # Encryption key
-│   └── profile.json       # Metadata (name, type, email, timestamps)
-└── personal/
-    └── ...
+│   ├── oauth.json         # OAuth credentials (accessToken, refreshToken, expiresAt, etc.)
+│   └── profile.json       # Metadata (name, type, timestamps)
+└── relay/
+    ├── settings.env.json  # API Key and Base URL
+    └── profile.json
 ```
 
-### Security
+### Files Modified on Switch
 
-- Credentials are **always encrypted** (AES-256-GCM), same as Claude Code itself
-- Each profile has its own encryption key
-- No plaintext tokens anywhere on disk
-- The `_active` file only stores the profile name
+| File | Purpose |
+|------|---------|
+| `~/.claude/.credentials.json` | OAuth tokens (`claudeAiOauth`), preserves `mcpOAuth` |
+| `~/.claude/settings.json` | API key env vars (`ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`) |
+| `~/.claude.json` | Cached account info (`oauthAccount` — email, org, billing) |
 
 ## Update Detection
 
-aicli-switch checks for new versions once per day (non-blocking). When an update is available:
+aicli-switch checks for new versions on every startup (non-blocking). When an update is available:
 
 ```
-Update available: 0.1.0 → 0.2.0
-  Run: npm update -g aicli-switch
-  Or:  https://github.com/killaragorn/aicli-switch/releases/tag/v0.2.0
+Update available: 0.2.0 → 0.3.0
+  Run: npm update -g @kio_ai/aicli-switch
+  Or:  https://github.com/killaragorn/aicli-switch/releases/tag/v0.3.0
 ```
 
 ## Roadmap

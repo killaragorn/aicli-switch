@@ -28,9 +28,10 @@ type EnvSettings struct {
 
 type ProfileInfo struct {
 	Profile
-	TokenExpiry time.Time
-	IsExpired   bool
-	IsActive    bool
+	TokenExpiry  time.Time
+	IsExpired    bool
+	IsActive     bool
+	Subscription string
 }
 
 // ReadCredentialsOAuth reads the claudeAiOauth section from ~/.claude/.credentials.json
@@ -245,6 +246,7 @@ func List() ([]ProfileInfo, error) {
 			if err == nil {
 				info.TokenExpiry = token.GetExpiryFromData(oauth)
 				info.IsExpired = token.IsExpiredData(oauth)
+				info.Subscription = oauth.SubscriptionType
 			}
 		}
 

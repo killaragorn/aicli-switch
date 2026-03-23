@@ -9,6 +9,7 @@ import (
 
 	"github.com/killaragorn/aicli-switch/internal/profile"
 	"github.com/killaragorn/aicli-switch/internal/switcher"
+	"github.com/killaragorn/aicli-switch/internal/token"
 	"github.com/killaragorn/aicli-switch/internal/updater"
 )
 
@@ -111,7 +112,7 @@ func cmdList() error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintf(w, "%s  NAME\tTYPE\tEMAIL\tSTATUS\tEXPIRY%s\n", dim, reset)
+	fmt.Fprintf(w, "%s  NAME\tTYPE\tSUBSCRIPTION\tSTATUS\tEXPIRY%s\n", dim, reset)
 
 	for _, p := range profiles {
 		marker := "  "
@@ -121,6 +122,7 @@ func cmdList() error {
 
 		status := ""
 		expiry := ""
+		subscription := ""
 		switch p.Type {
 		case "oauth":
 			if p.TokenExpiry.IsZero() {
@@ -138,17 +140,18 @@ func cmdList() error {
 					expiry = red + "expired" + reset
 				}
 			}
+			if p.Subscription != "" {
+				subscription = cyan + p.Subscription + reset
+			} else {
+				subscription = dim + "-" + reset
+			}
 		case "apikey":
 			status = green + "ready" + reset
 			expiry = dim + "n/a" + reset
+			subscription = dim + "api key" + reset
 		}
 
-		email := p.Email
-		if email == "" {
-			email = dim + "-" + reset
-		}
-
-		fmt.Fprintf(w, "%s%s\t%s\t%s\t%s\t%s\n", marker, p.Name, p.Type, email, status, expiry)
+		fmt.Fprintf(w, "%s%s\t%s\t%s\t%s\t%s\n", marker, p.Name, p.Type, subscription, status, expiry)
 	}
 
 	w.Flush()
@@ -167,31 +170,65 @@ func cmdStatus() error {
 		return err
 	}
 
-	fmt.Printf("%s%sActive Profile:%s %s\n", bold, cyan, reset, p.Name)
-	fmt.Printf("  Type:    %s\n", p.Type)
-	if p.Email != "" {
-		fmt.Printf("  Email:   %s\n", p.Email)
-	}
-	fmt.Printf("  Created: %s\n", p.CreatedAt)
+	fmt.Printf("%s%sActive Profile:%s %s (%s)\n", bold, cyan, reset, p.Name, p.Type)
+	fmt.Printf("  Created:  %s\n", p.CreatedAt)
 	if p.LastSwitched != "" {
 		fmt.Printf("  Switched: %s\n", p.LastSwitched)
 	}
 
-	if p.Type == "oauth" {
-		profiles, _ := profile.List()
-		for _, info := range profiles {
-			if info.Name == active {
-				if !info.TokenExpiry.IsZero() {
-					remaining := time.Until(info.TokenExpiry)
-					if remaining > 0 {
-						fmt.Printf("  Token:   %svalid%s (expires in %s)\n", green, reset, formatDuration(remaining))
-					} else {
-						fmt.Printf("  Token:   %sexpired%s\n", red, reset)
-					}
-				}
-				break
-			}
+	if p.Type != "oauth" {
+		return nil
+	}
+
+	// Read profile's saved oauth data
+	profileOAuth, err := profile.ReadProfileOAuth(active)
+	if err != nil {
+		fmt.Printf("  %s⚠ Cannot read profile oauth data: %v%s\n", yellow, err, reset)
+		return nil
+	}
+
+	fmt.Printf("\n%s%sProfile (saved):%s\n", bold, dim, reset)
+	profileExpiry := token.GetExpiryFromData(profileOAuth)
+	if !profileExpiry.IsZero() {
+		remaining := time.Until(profileExpiry)
+		if remaining > 0 {
+			fmt.Printf("  Token:        %svalid%s (expires in %s, at %s)\n", green, reset, formatDuration(remaining), profileExpiry.Local().Format("2006-01-02 15:04:05"))
+		} else {
+			fmt.Printf("  Token:        %sexpired%s (at %s)\n", red, reset, profileExpiry.Local().Format("2006-01-02 15:04:05"))
 		}
+	}
+	if profileOAuth.SubscriptionType != "" {
+		fmt.Printf("  Subscription: %s%s%s\n", cyan, profileOAuth.SubscriptionType, reset)
+	}
+
+	// Read live credentials and compare
+	liveOAuth, err := profile.ReadCredentialsOAuth()
+	fmt.Printf("\n%s%s~/.claude/.credentials.json (live):%s\n", bold, dim, reset)
+	if err != nil {
+		fmt.Printf("  %s⚠ Cannot read: %v%s\n", yellow, err, reset)
+		return nil
+	}
+
+	liveExpiry := token.GetExpiryFromData(liveOAuth)
+	if !liveExpiry.IsZero() {
+		remaining := time.Until(liveExpiry)
+		if remaining > 0 {
+			fmt.Printf("  Token:        %svalid%s (expires in %s, at %s)\n", green, reset, formatDuration(remaining), liveExpiry.Local().Format("2006-01-02 15:04:05"))
+		} else {
+			fmt.Printf("  Token:        %sexpired%s (at %s)\n", red, reset, liveExpiry.Local().Format("2006-01-02 15:04:05"))
+		}
+	}
+	if liveOAuth.SubscriptionType != "" {
+		fmt.Printf("  Subscription: %s%s%s\n", cyan, liveOAuth.SubscriptionType, reset)
+	}
+
+	// Sync check
+	fmt.Printf("\n")
+	if profileOAuth.AccessToken == liveOAuth.AccessToken {
+		fmt.Printf("  %s✓ In sync%s\n", green, reset)
+	} else {
+		fmt.Printf("  %s⚠ Out of sync%s — profile token differs from live credentials\n", yellow, reset)
+		fmt.Printf("    Run '%saicli-switch %s%s' to re-sync.\n", bold, active, reset)
 	}
 
 	return nil

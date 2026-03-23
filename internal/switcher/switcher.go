@@ -123,7 +123,13 @@ func deployOAuth(name string) error {
 	}
 
 	// Write claudeAiOauth to ~/.claude/.credentials.json, preserving mcpOAuth
-	return profile.WriteCredentialsOAuth(oauth)
+	if err := profile.WriteCredentialsOAuth(oauth); err != nil {
+		return err
+	}
+
+	// Clear any API key from settings to avoid auth conflict
+	clearAPIKeyFromSettings()
+	return nil
 }
 
 func deployAPIKey(name string) error {
@@ -139,7 +145,13 @@ func deployAPIKey(name string) error {
 		return fmt.Errorf("parse env settings: %w", err)
 	}
 
-	return mergeEnvToSettings(env)
+	if err := mergeEnvToSettings(env); err != nil {
+		return err
+	}
+
+	// Clear claudeAiOauth from credentials to avoid auth conflict
+	clearOAuthFromCredentials()
+	return nil
 }
 
 func mergeEnvToSettings(env profile.EnvSettings) error {
@@ -175,6 +187,24 @@ func mergeEnvToSettings(env profile.EnvSettings) error {
 	}
 
 	return os.WriteFile(settingsPath, out, 0600)
+}
+
+func clearOAuthFromCredentials() {
+	credPath := config.CredentialsFile()
+	data, err := os.ReadFile(credPath)
+	if err != nil {
+		return
+	}
+
+	var raw map[string]json.RawMessage
+	if json.Unmarshal(data, &raw) != nil {
+		return
+	}
+
+	delete(raw, "claudeAiOauth")
+
+	out, _ := json.MarshalIndent(raw, "", "  ")
+	os.WriteFile(credPath, out, 0600)
 }
 
 func clearAPIKeyFromSettings() {

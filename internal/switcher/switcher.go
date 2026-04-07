@@ -25,13 +25,6 @@ func Switch(name string) error {
 		backupCurrent(active)
 	}
 
-	// For OAuth profiles, check and refresh token if needed
-	if target.Type == "oauth" {
-		if err := ensureValidToken(name); err != nil {
-			return fmt.Errorf("token validation: %w", err)
-		}
-	}
-
 	// Deploy credentials
 	switch target.Type {
 	case "oauth":
@@ -100,20 +93,6 @@ func RefreshProfile(name string) error {
 	}
 
 	return nil
-}
-
-func ensureValidToken(name string) error {
-	oauth, err := profile.ReadProfileOAuth(name)
-	if err != nil {
-		return err
-	}
-
-	if !token.IsExpiredData(oauth) {
-		return nil
-	}
-
-	fmt.Printf("Token expired, refreshing...\n")
-	return RefreshProfile(name)
 }
 
 func deployOAuth(name string) error {
